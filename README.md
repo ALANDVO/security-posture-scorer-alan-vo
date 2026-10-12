@@ -1,5 +1,8 @@
 # security-posture-scorer-alan-vo
 
+> Work in progress. This checkpoint may be incomplete or fail tests. See PLAN.md and STATUS.md before use.
+
+
 > AI security posture scorer that scans a codebase or config for misconfigurations, missing security headers, weak crypto, and dependency risks, then produces a 0-100 score with LLM-justified deductions and a prioritized fix list.
 
 <div align="center">
