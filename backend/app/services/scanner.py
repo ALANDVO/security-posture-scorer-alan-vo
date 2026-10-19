@@ -47,11 +47,11 @@ class SecurityScanner:
         for filename, file_content in files_to_scan.items():
             lower_name = filename.lower()
             # 1. Config and container scanning
-            if any(lower_name.endswith(ext) for ext in (".json", ".yaml", ".yml", ".toml", ".ini", ".env", "dockerfile")) or "config" in lower_name:
+            if target_type == "config" or any(lower_name.endswith(ext) for ext in (".json", ".yaml", ".yml", ".toml", ".ini", ".env", "dockerfile")) or "config" in lower_name:
                 findings.extend(self.scan_configuration(filename, file_content))
 
             # 2. Source code crypto & secrets scanning
-            if any(lower_name.endswith(ext) for ext in (".py", ".js", ".ts", ".go", ".rs", ".java", ".rb", ".php")):
+            if target_type == "codebase" or any(lower_name.endswith(ext) for ext in (".py", ".js", ".ts", ".go", ".rs", ".java", ".rb", ".php")):
                 findings.extend(self.scan_cryptography(filename, file_content))
                 findings.extend(self.scan_secrets(filename, file_content))
 
@@ -60,12 +60,17 @@ class SecurityScanner:
                 findings.extend(self.scan_http_headers(file_content))
 
             # 4. Dependency manifests
-            if any(manifest in lower_name for manifest in ("requirements.txt", "package.json", "go.mod", "cargo.toml")):
+            if target_type == "manifest" or any(manifest in lower_name for manifest in ("requirements.txt", "package.json", "go.mod", "cargo.toml")):
                 findings.extend(self.scan_dependencies(filename, file_content))
 
         # If pure raw content was provided with specific target_type
         if content and not file_tree:
-            if target_type == "headers":
+            if target_type == "config":
+                findings.extend(self.scan_configuration(target_name, content))
+            elif target_type == "codebase":
+                findings.extend(self.scan_cryptography(target_name, content))
+                findings.extend(self.scan_secrets(target_name, content))
+            elif target_type == "headers":
                 findings.extend(self.scan_http_headers(content))
             elif target_type == "manifest":
                 findings.extend(self.scan_dependencies(target_name, content))
@@ -81,48 +86,41 @@ class SecurityScanner:
     def scan_configuration(self, filename: str, content: str) -> List[Finding]:
         """Audit configuration files for insecure defaults and debug flags."""
         findings: List[Finding] = []
-
-        # Debug mode enabled
-        if re.search(r'(?i)(["\']?debug["\']?\s*[:=]\s*(true|1|"true")|DEBUG\s*=\s*True)', content):
-            findings.append(Finding(
-                id=f"cfg-debug-enabled-{filename}",
-                title="Debug mode enabled in production configuration",
-                category="configuration",
-                severity="HIGH",
-                description="Application has debug mode enabled, exposing stack traces and diagnostic endpoints.",
-                file_path=filename,
-                evidence="debug = true / 1",
-                deduction_points=10,
-                remediation="Ensure DEBUG is disabled (debug=False or debug: false) in production environments."
-            ))
-
-        # CORS allow all origins
-        if re.search(r'(?i)(["\']?allow_origins["\']?\s*[:=]\s*\[?\s*["\']\*["\']|access-control-allow-origin\s*:\s*\*)', content):
-            findings.append(Finding(
-                id=f"cfg-cors-wildcard-{filename}",
-                title="Overly permissive CORS wildcard (allow_origins: *)",
-                category="configuration",
-                severity="HIGH",
-                description="CORS is configured with wildcard origin '*', allowing unauthorized third-party sites to read responses.",
-                file_path=filename,
-                evidence="allow_origins: ['*']",
-                deduction_points=10,
-                remediation="Restrict CORS origins to explicit, verified domain names."
-            ))
-
-        # TLS / SSL disabled
-        if re.search(r'(?i)(["\']?ssl["\']?\s*[:=]\s*(false|0|"false")|["\']?tls["\']?\s*[:=]\s*(false|0)|require_ssl\s*=\s*False)', content):
-            findings.append(Finding(
-                id=f"cfg-tls-disabled-{filename}",
-                title="TLS/SSL transport encryption explicitly disabled",
-                category="configuration",
-                severity="CRITICAL",
-                description="Transport Layer Security is disabled in configuration, exposing traffic to man-in-the-middle eavesdropping.",
-                file_path=filename,
-                evidence="ssl/tls: false",
-                deduction_points=15,
-                remediation="Enforce TLS/HTTPS across all public and internal communications."
-            ))
+        cfg_checks = [
+            (
+                r'(?i)(["\']?debug["\']?\s*[:=]\s*(true|1|"true")|DEBUG\s*=\s*True)',
+                f"cfg-debug-enabled-{filename}",
+                "Debug mode enabled in production configuration",
+                "HIGH",
+                "Application has debug mode enabled, exposing stack traces and diagnostic endpoints.",
+                "debug = true / 1",
+                10,
+                "Ensure DEBUG is disabled (debug=False or debug: false) in production environments."
+            ),
+            (
+                r'(?i)(["\']?allow_origins["\']?\s*[:=]\s*\[?\s*["\']\*["\']|access-control-allow-origin\s*:\s*\*)',
+                f"cfg-cors-wildcard-{filename}",
+                "Overly permissive CORS wildcard (allow_origins: *)",
+                "HIGH",
+                "CORS is configured with wildcard origin '*', allowing unauthorized third-party sites to read responses.",
+                "allow_origins: ['*']",
+                10,
+                "Restrict CORS origins to explicit, verified domain names."
+            ),
+            (
+                r'(?i)(["\']?ssl["\']?\s*[:=]\s*(false|0|"false")|["\']?tls["\']?\s*[:=]\s*(false|0)|require_ssl\s*=\s*False)',
+                f"cfg-tls-disabled-{filename}",
+                "TLS/SSL transport encryption explicitly disabled",
+                "CRITICAL",
+                "Transport Layer Security is disabled in configuration, exposing traffic to man-in-the-middle eavesdropping.",
+                "ssl/tls: false",
+                15,
+                "Enforce TLS/HTTPS across all public and internal communications."
+            )
+        ]
+        for pattern, fid, title, sev, desc, evid, pts, rem in cfg_checks:
+            if re.search(pattern, content):
+                findings.append(Finding(id=fid, title=title, category="configuration", severity=sev, description=desc, file_path=filename, evidence=evid, deduction_points=pts, remediation=rem))
 
         # Dockerfile running as root
         if "dockerfile" in filename.lower():
@@ -145,97 +143,26 @@ class SecurityScanner:
         """Audit HTTP security headers and cookie flags."""
         findings: List[Finding] = []
         normalized = headers_text.lower()
+        hdr_rules = [
+            ("content-security-policy" not in normalized, "hdr-missing-csp", "Missing Content-Security-Policy (CSP) header", "configuration", "HIGH", "No Content-Security-Policy header detected; browser has no baseline defense against Cross-Site Scripting (XSS).", 8, "Configure a restrictive Content-Security-Policy header (e.g., default-src 'self'; script-src 'self')."),
+            ("'unsafe-inline'" in normalized and "'nonce-" not in normalized and "content-security-policy" in normalized, "hdr-weak-csp-inline", "Content-Security-Policy allows 'unsafe-inline' without nonce", "configuration", "MEDIUM", "CSP allows unsafe inline scripts without cryptographic nonces or hashes.", 5, "Refactor inline scripts to external modules or protect them with cryptographic nonces."),
+            ("strict-transport-security" not in normalized, "hdr-missing-hsts", "Missing HTTP Strict-Transport-Security (HSTS) header", "configuration", "HIGH", "Strict-Transport-Security is not present, allowing protocol downgrade attacks and cookie interception.", 8, "Add 'Strict-Transport-Security: max-age=31536000; includeSubDomains; preload'."),
+            ("x-content-type-options" not in normalized or "nosniff" not in normalized, "hdr-missing-nosniff", "Missing X-Content-Type-Options: nosniff header", "configuration", "MEDIUM", "Browser MIME-type sniffing is not disabled, exposing users to executable content confusion attacks.", 4, "Add 'X-Content-Type-Options: nosniff' to all HTTP responses."),
+            ("x-frame-options" not in normalized and "frame-ancestors" not in normalized, "hdr-missing-frame-protection", "Missing Clickjacking defense (X-Frame-Options / frame-ancestors)", "configuration", "MEDIUM", "Application can be embedded inside external iframes, leaving users vulnerable to clickjacking attacks.", 5, "Set 'X-Frame-Options: DENY' or configure CSP 'frame-ancestors 'none''."),
+        ]
+        for cond, fid, title, cat, sev, desc, pts, rem in hdr_rules:
+            if cond:
+                findings.append(Finding(id=fid, title=title, category=cat, severity=sev, description=desc, deduction_points=pts, remediation=rem))
 
-        # Content-Security-Policy
-        if "content-security-policy" not in normalized:
-            findings.append(Finding(
-                id="hdr-missing-csp",
-                title="Missing Content-Security-Policy (CSP) header",
-                category="configuration",
-                severity="HIGH",
-                description="No Content-Security-Policy header detected; browser has no baseline defense against Cross-Site Scripting (XSS).",
-                deduction_points=8,
-                remediation="Configure a restrictive Content-Security-Policy header (e.g., default-src 'self'; script-src 'self')."
-            ))
-        elif "'unsafe-inline'" in normalized and "'nonce-" not in normalized:
-            findings.append(Finding(
-                id="hdr-weak-csp-inline",
-                title="Content-Security-Policy allows 'unsafe-inline' without nonce",
-                category="configuration",
-                severity="MEDIUM",
-                description="CSP allows unsafe inline scripts without cryptographic nonces or hashes.",
-                deduction_points=5,
-                remediation="Refactor inline scripts to external modules or protect them with cryptographic nonces."
-            ))
-
-        # Strict-Transport-Security (HSTS)
-        if "strict-transport-security" not in normalized:
-            findings.append(Finding(
-                id="hdr-missing-hsts",
-                title="Missing HTTP Strict-Transport-Security (HSTS) header",
-                category="configuration",
-                severity="HIGH",
-                description="Strict-Transport-Security is not present, allowing protocol downgrade attacks and cookie interception.",
-                deduction_points=8,
-                remediation="Add 'Strict-Transport-Security: max-age=31536000; includeSubDomains; preload'."
-            ))
-
-        # X-Content-Type-Options
-        if "x-content-type-options" not in normalized or "nosniff" not in normalized:
-            findings.append(Finding(
-                id="hdr-missing-nosniff",
-                title="Missing X-Content-Type-Options: nosniff header",
-                category="configuration",
-                severity="MEDIUM",
-                description="Browser MIME-type sniffing is not disabled, exposing users to executable content confusion attacks.",
-                deduction_points=4,
-                remediation="Add 'X-Content-Type-Options: nosniff' to all HTTP responses."
-            ))
-
-        # X-Frame-Options or frame-ancestors
-        if "x-frame-options" not in normalized and "frame-ancestors" not in normalized:
-            findings.append(Finding(
-                id="hdr-missing-frame-protection",
-                title="Missing Clickjacking defense (X-Frame-Options / frame-ancestors)",
-                category="configuration",
-                severity="MEDIUM",
-                description="Application can be embedded inside external iframes, leaving users vulnerable to clickjacking attacks.",
-                deduction_points=5,
-                remediation="Set 'X-Frame-Options: DENY' or configure CSP 'frame-ancestors 'none''."
-            ))
-
-        # Cookie security flags
         if "set-cookie" in normalized:
-            if "httponly" not in normalized:
-                findings.append(Finding(
-                    id="hdr-cookie-missing-httponly",
-                    title="Set-Cookie header missing HttpOnly flag",
-                    category="authentication",
-                    severity="HIGH",
-                    description="Session cookies lack HttpOnly flag, allowing client-side JavaScript to read authentication tokens.",
-                    deduction_points=8,
-                    remediation="Add the HttpOnly attribute to all sensitive session and authentication cookies."
-                ))
-            if "secure" not in normalized:
-                findings.append(Finding(
-                    id="hdr-cookie-missing-secure",
-                    title="Set-Cookie header missing Secure flag",
-                    category="authentication",
-                    severity="HIGH",
-                    description="Session cookies lack Secure flag, permitting transmission over unencrypted HTTP connections.",
-                    deduction_points=8,
-                    remediation="Add the Secure attribute so cookies are only sent over TLS/HTTPS."
-                ))
-            if "samesite" not in normalized:
-                findings.append(Finding(
-                    id="hdr-cookie-missing-samesite",
-                    title="Set-Cookie header missing SameSite attribute",
-                    category="authentication",
-                    severity="MEDIUM",
-                    description="Cookies lack SameSite policy, leaving sessions exposed to Cross-Site Request Forgery (CSRF).",
-                    deduction_points=5,
-                    remediation="Set SameSite=Lax or SameSite=Strict on all application cookies."
-                ))
+            cookie_rules = [
+                ("httponly" not in normalized, "hdr-cookie-missing-httponly", "Set-Cookie header missing HttpOnly flag", "HIGH", "Session cookies lack HttpOnly flag, allowing client-side JavaScript to read authentication tokens.", 8, "Add the HttpOnly attribute to all sensitive session and authentication cookies."),
+                ("secure" not in normalized, "hdr-cookie-missing-secure", "Set-Cookie header missing Secure flag", "HIGH", "Session cookies lack Secure flag, permitting transmission over unencrypted HTTP connections.", 8, "Add the Secure attribute so cookies are only sent over TLS/HTTPS."),
+                ("samesite" not in normalized, "hdr-cookie-missing-samesite", "Set-Cookie header missing SameSite attribute", "MEDIUM", "Cookies lack SameSite policy, leaving sessions exposed to Cross-Site Request Forgery (CSRF).", 5, "Set SameSite=Lax or SameSite=Strict on all application cookies.")
+            ]
+            for cond, fid, title, sev, desc, pts, rem in cookie_rules:
+                if cond:
+                    findings.append(Finding(id=fid, title=title, category="authentication", severity=sev, description=desc, deduction_points=pts, remediation=rem))
 
         return findings
 
@@ -276,20 +203,21 @@ class SecurityScanner:
             ))
 
         # Insecure PRNG in security context
-        for match in re.finditer(r'(?i)\b(random\.random\(\)|random\.randint\(|Math\.random\(\))\s*(?:.*?(?:token|secret|key|salt|iv|nonce))', content):
-            line_no = content[:match.start()].count("\n") + 1
-            findings.append(Finding(
-                id=f"crypto-pseudo-random-{filename}-{line_no}",
-                title="Cryptographically weak pseudo-random number generator used for sensitive token",
-                category="cryptography",
-                severity="MEDIUM",
-                description="Non-cryptographic PRNGs are predictable and should never generate secrets, tokens, or salts.",
-                file_path=filename,
-                line_number=line_no,
-                evidence=match.group(0),
-                deduction_points=7,
-                remediation="Use secrets (Python: secrets.token_bytes or secrets.token_urlsafe) or crypto.getRandomValues()."
-            ))
+        for line_no, line in enumerate(content.splitlines(), start=1):
+            if re.search(r'(?i)\b(random\.(?:random|randint|choice|randrange)|Math\.random)\b', line):
+                if re.search(r'(?i)(token|secret|key|salt|iv|nonce|auth|session|password)', line):
+                    findings.append(Finding(
+                        id=f"crypto-pseudo-random-{filename}-{line_no}",
+                        title="Cryptographically weak pseudo-random number generator used for sensitive token",
+                        category="cryptography",
+                        severity="MEDIUM",
+                        description="Non-cryptographic PRNGs are predictable and should never generate secrets, tokens, or salts.",
+                        file_path=filename,
+                        line_number=line_no,
+                        evidence=line.strip()[:100],
+                        deduction_points=7,
+                        remediation="Use secrets (Python: secrets.token_bytes or secrets.token_urlsafe) or crypto.getRandomValues()."
+                    ))
 
         return findings
 

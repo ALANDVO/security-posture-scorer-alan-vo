@@ -1,7 +1,21 @@
 {
+  "schema_version": 1,
   "name": "security-posture-scorer-alan-vo",
   "owner": "ALANDVO",
   "email": "alanvo@gmail.com",
+  "domain": "security",
   "summary": "Work in progress: security-posture-scorer-alan-vo",
+  "workflows": [
+    "Scan codebase or configuration files for misconfigurations, missing security headers, weak cryptography, and vulnerable dependencies",
+    "Calculate deterministic 0-100 security posture score with category breakdown, deductions, and ROI-ranked prioritized remediation fixes",
+    "Benchmark security scoring model against a curated labeled test suite measuring precision, recall, F1, and mean absolute error"
+  ],
+  "auth": "oidc-keycloak-saml-broker",
+  "llm_providers": [
+    "openai-compatible",
+    "anthropic",
+    "gemini",
+    "ollama"
+  ],
   "status": "work-in-progress"
 }

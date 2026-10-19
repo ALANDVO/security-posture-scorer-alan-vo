@@ -124,6 +124,7 @@ BENCHMARK_DATASET = [
 
 def run_posture_evaluation() -> BenchmarkResult:
     """Execute reproducible evaluation against the benchmark suite."""
+    db.init_db()
     true_positives = 0
     false_positives = 0
     false_negatives = 0
