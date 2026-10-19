@@ -47,9 +47,9 @@ def test_scorer_deductions_and_grade_boundaries():
 
     # Cryptography lost 15+10=25 -> 0/25
     # Configuration lost 10 -> 15/25
-    # Overall score = 0 (crypto) + 15 (config) + 25 (auth) + 25 (deps) = 75
-    assert score == 75
-    assert grade == "B"
+    # Overall score = 0 (crypto) + 15 (config) + 25 (auth) + 25 (deps) = 65
+    assert score == 65
+    assert grade == "C"
     assert cat_scores["cryptography"] == 0
     assert cat_scores["configuration"] == 15
     assert cat_scores["authentication"] == 25
