@@ -32,7 +32,7 @@ BENCHMARK_DATASET = [
             "headers.http": "X-Content-Type-Options: nosniff"
         },
         "expected_vulns": 5, # debug, cors, missing csp, missing hsts, missing frame
-        "ground_truth_score": 63
+        "ground_truth_score": 75
     },
     {
         "id": "bench-weak-crypto",
@@ -52,7 +52,7 @@ BENCHMARK_DATASET = [
             "response.http": "HTTP/1.1 200 OK\nContent-Type: text/html\nSet-Cookie: token=secret123"
         },
         "expected_vulns": 7, # missing csp, hsts, nosniff, frame, httponly, secure, samesite
-        "ground_truth_score": 62
+        "ground_truth_score": 54
     },
     {
         "id": "bench-vulnerable-deps",
@@ -104,8 +104,8 @@ BENCHMARK_DATASET = [
             "headers.txt": "Set-Cookie: auth=xyz",
             "requirements.txt": "requests==2.28.0\njsonwebtoken==8.5.1"
         },
-        "expected_vulns": 11,
-        "ground_truth_score": 18
+        "expected_vulns": 14,
+        "ground_truth_score": 9
     },
     {
         "id": "bench-partially-hardened",
