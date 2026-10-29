@@ -187,11 +187,13 @@ class SecurityScanner:
             ))
 
         # Obsolete ciphers & ECB mode: DES, 3DES, RC4, Blowfish, AES-ECB
-        for match in re.finditer(r'(?i)\b(DES|3DES|Blowfish|RC4|ARC4|MODE_ECB|AES\.MODE_ECB|Cipher\.getInstance\s*\(\s*["\']AES/ECB)\b', content):
+        # Match actual cipher usage: DES.new(), AES.new(..., MODE_ECB), Cipher.getInstance("AES/ECB"), etc.
+        # Avoid matching import statements like "from Crypto.Cipher import DES"
+        for match in re.finditer(r'(?i)(?:\b(?:DES|3DES|Blowfish|RC4|ARC4)\b\s*\.\s*(?:new|encrypt|decrypt)|\bMODE_ECB\b|\bAES\.MODE_ECB\b|Cipher\.getInstance\s*\(\s*["\']AES/ECB)', content):
             line_no = content[:match.start()].count("\n") + 1
             findings.append(Finding(
                 id=f"crypto-insecure-cipher-{filename}-{line_no}",
-                title=f"Insecure cipher algorithm or ECB mode ({match.group(1)})",
+                title=f"Insecure cipher algorithm or ECB mode ({match.group(0)})",
                 category="cryptography",
                 severity="CRITICAL",
                 description="ECB mode leaks plaintext data patterns, and legacy ciphers (DES/RC4) are trivially breakable.",

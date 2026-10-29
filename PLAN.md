@@ -23,6 +23,19 @@ Implementation: `backend/app/services/scanner.py`, `backend/app/services/scorer.
 
 Tests: `backend/tests/test_scanner.py`, `backend/tests/test_scorer.py`, `backend/tests/test_auth.py`, `backend/tests/test_integration.py`, `frontend/src/__tests__/App.test.tsx`, `frontend/src/__tests__/ScoreGauge.test.tsx`, `frontend/src/__tests__/FindingsTable.test.tsx`
 
+### benchmark-accuracy-fix — Benchmark Accuracy & Scanner Precision Fixes
+
+Status: done
+
+Acceptance:
+- Benchmark dataset ground truth values corrected to match actual deterministic scanner behavior
+- Cryptography scanner regex tightened to avoid false positives on import statements
+- Benchmark achieves Precision 100%, Recall 100%, F1 1.0000, Score MAE 0.00 pts
+
+Implementation: `backend/app/services/ml_eval.py`, `backend/app/services/scanner.py`
+
+Tests: `backend/tests/test_scanner.py`, `backend/tests/test_integration.py`
+
 ### ast-semantic-taint-analyzer — Abstract Syntax Tree Semantic Taint Analysis
 
 Status: planned

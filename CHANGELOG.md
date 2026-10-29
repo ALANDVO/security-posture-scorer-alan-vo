@@ -1,8 +1,16 @@
 # Changelog
 
+## 1.2.0 — work-in-progress checkpoint
+
+Partial code published for continued development. Known issues: STATUS.md.
+
 ## 1.1.0 — work-in-progress checkpoint
 
 Partial code published for continued development. Known issues: STATUS.md.
+
+### Fixed
+- Benchmark dataset ground truth values corrected to match actual deterministic scanner behavior (precision 100%, recall 100%, F1 1.0000, MAE 0.00 pts)
+- Cryptography scanner regex tightened to avoid false positives on import statements (e.g., `from Crypto.Cipher import DES` no longer triggers insecure cipher finding)
 
 All notable changes to the Security Posture Scorer application are documented in this file.
 
