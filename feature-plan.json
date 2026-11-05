@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "current_feature": "continue-implementation",
+  "current_feature": "ast-semantic-taint-analyzer",
   "features": [
     {
       "id": "continue-implementation",
@@ -61,12 +61,16 @@
     {
       "id": "ast-semantic-taint-analyzer",
       "title": "Abstract Syntax Tree Semantic Taint Analysis",
-      "status": "planned",
+      "status": "in_progress",
       "acceptance": [
         "Multi-step data flow tracking from untrusted HTTP request inputs to sensitive database and command sinks"
       ],
-      "implementation": [],
-      "tests": []
+      "implementation": [
+        "backend/app/services/scanner.py"
+      ],
+      "tests": [
+        "backend/tests/test_scanner.py"
+      ]
     },
     {
       "id": "github-actions-posture-reporter",

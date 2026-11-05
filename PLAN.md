@@ -4,7 +4,7 @@ Each round completes one feature or repair. Future items are planned, not implem
 
 ## Current round
 
-continue-implementation
+ast-semantic-taint-analyzer
 
 ## Roadmap
 
@@ -38,10 +38,14 @@ Tests: `backend/tests/test_scanner.py`, `backend/tests/test_integration.py`
 
 ### ast-semantic-taint-analyzer — Abstract Syntax Tree Semantic Taint Analysis
 
-Status: planned
+Status: in_progress
 
 Acceptance:
 - Multi-step data flow tracking from untrusted HTTP request inputs to sensitive database and command sinks
+
+Implementation: `backend/app/services/scanner.py`
+
+Tests: `backend/tests/test_scanner.py`
 
 ### github-actions-posture-reporter — Automated Pull Request Security Posture PR Commenter
 
