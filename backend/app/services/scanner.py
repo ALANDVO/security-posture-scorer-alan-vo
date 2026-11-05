@@ -1,6 +1,7 @@
 """Deterministic security posture scanner auditing configuration, headers, crypto, and dependencies."""
 import re
-from typing import List, Dict, Optional, Any
+import ast
+from typing import List, Dict, Optional, Any, Set, Tuple
 from backend.app.models.schemas import Finding
 
 # Curated CVE catalogue for common dependency manifests
@@ -54,6 +55,9 @@ class SecurityScanner:
             if target_type == "codebase" or any(lower_name.endswith(ext) for ext in (".py", ".js", ".ts", ".go", ".rs", ".java", ".rb", ".php")):
                 findings.extend(self.scan_cryptography(filename, file_content))
                 findings.extend(self.scan_secrets(filename, file_content))
+                # 2b. AST semantic taint analysis for Python files
+                if filename.endswith(".py"):
+                    findings.extend(self.scan_taint_analysis(filename, file_content))
 
             # 3. HTTP Header scans if target is headers or response
             if target_type == "headers" or "header" in lower_name or lower_name.endswith(".http"):
@@ -70,6 +74,8 @@ class SecurityScanner:
             elif target_type == "codebase":
                 findings.extend(self.scan_cryptography(target_name, content))
                 findings.extend(self.scan_secrets(target_name, content))
+                if target_name.endswith(".py"):
+                    findings.extend(self.scan_taint_analysis(target_name, content))
             elif target_type == "headers":
                 findings.extend(self.scan_http_headers(content))
             elif target_type == "manifest":
@@ -300,6 +306,198 @@ class SecurityScanner:
                     deduction_points=3,
                     remediation="Pin dependency to an exact immutable version and verify hashes."
                 ))
+
+        return findings
+
+    def scan_taint_analysis(self, filename: str, content: str) -> List[Finding]:
+        """AST-based semantic taint analysis tracking untrusted HTTP inputs to sensitive sinks."""
+        findings: List[Finding] = []
+
+        if not filename.endswith(".py"):
+            return findings
+
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return findings
+
+        # Taint source patterns: HTTP request input extraction (base attributes)
+        TAINT_SOURCES = {
+            # Flask/Django/FastAPI/Starlette request accessors
+            "request.args", "request.form", "request.json", "request.data",
+            "request.headers", "request.cookies", "request.files",
+            "request.query_params", "request.path_params", "request.body",
+            "request.GET", "request.POST", "request.META", "request.COOKIES",
+            "request.query", "request.params", "request.payload",
+        }
+
+        # Taint sink patterns: dangerous operations
+        TAINT_SINKS = {
+            # SQL execution sinks
+            "execute", "executemany", "cursor.execute", "cursor.executemany",
+            "session.execute", "db.execute", "connection.execute",
+            "raw", "extra", "QuerySet.raw",
+            # Command execution sinks
+            "subprocess.run", "subprocess.Popen", "subprocess.call",
+            "os.system", "os.popen", "commands.getstatusoutput", "commands.getoutput",
+            "eval", "exec", "compile",
+            # Template rendering with user input (XSS risk)
+            "render_template_string", "Markup", "mark_safe", "safe",
+            # Path traversal
+            "open", "pathlib.Path.open",
+        }
+
+        class TaintVisitor(ast.NodeVisitor):
+            def __init__(self):
+                self.tainted_vars: Set[str] = set()
+                self.taint_flows: List[Tuple[str, str, int, int]] = []
+
+            def _get_attribute_chain(self, node: ast.Attribute) -> str:
+                parts = []
+                current = node
+                while isinstance(current, ast.Attribute):
+                    parts.append(current.attr)
+                    current = current.value
+                if isinstance(current, ast.Name):
+                    parts.append(current.id)
+                return ".".join(reversed(parts))
+
+            def _is_taint_source(self, attr_chain: str) -> bool:
+                """Check if any prefix of the attribute chain matches a known taint source."""
+                parts = attr_chain.split(".")
+                for i in range(len(parts), 0, -1):
+                    prefix = ".".join(parts[:i])
+                    if prefix in TAINT_SOURCES:
+                        return True
+                return False
+
+            def _contains_tainted(self, node: ast.AST) -> bool:
+                if isinstance(node, ast.Name):
+                    return node.id in self.tainted_vars
+                elif isinstance(node, ast.Attribute):
+                    return self._contains_tainted(node.value)
+                elif isinstance(node, ast.BinOp):
+                    return self._contains_tainted(node.left) or self._contains_tainted(node.right)
+                elif isinstance(node, ast.JoinedStr):
+                    for value in node.values:
+                        if isinstance(value, ast.FormattedValue) and self._contains_tainted(value.value):
+                            return True
+                elif isinstance(node, ast.Call):
+                    for arg in node.args:
+                        if self._contains_tainted(arg):
+                            return True
+                    for kw in node.keywords:
+                        if self._contains_tainted(kw.value):
+                            return True
+                elif isinstance(node, ast.Subscript):
+                    return self._contains_tainted(node.value) or self._contains_tainted(node.slice)
+                return False
+
+            def _get_tainted_var_name(self, node: ast.AST) -> Optional[str]:
+                if isinstance(node, ast.Name):
+                    return node.id if node.id in self.tainted_vars else None
+                elif isinstance(node, ast.Attribute):
+                    return self._get_tainted_var_name(node.value)
+                elif isinstance(node, ast.Subscript):
+                    return self._get_tainted_var_name(node.value)
+                return None
+
+            def visit_Assign(self, node: ast.Assign):
+                # Check if RHS is a taint source
+                rhs_tainted = False
+                source_name = None
+
+                if isinstance(node.value, ast.Call):
+                    # Check for direct source calls like request.args.get()
+                    if isinstance(node.value.func, ast.Attribute):
+                        attr_chain = self._get_attribute_chain(node.value.func)
+                        if self._is_taint_source(attr_chain):
+                            rhs_tainted = True
+                            source_name = attr_chain
+                    elif isinstance(node.value.func, ast.Name):
+                        if node.value.func.id in TAINT_SOURCES:
+                            rhs_tainted = True
+                            source_name = node.value.func.id
+
+                elif isinstance(node.value, ast.Attribute):
+                    # Direct attribute access like request.args
+                    attr_chain = self._get_attribute_chain(node.value)
+                    if self._is_taint_source(attr_chain):
+                        rhs_tainted = True
+                        source_name = attr_chain
+
+                elif isinstance(node.value, ast.BinOp):
+                    # String concatenation with tainted variable
+                    if self._contains_tainted(node.value):
+                        rhs_tainted = True
+                        source_name = "tainted_concat"
+
+                elif isinstance(node.value, ast.JoinedStr):
+                    # f-strings with tainted variables
+                    if self._contains_tainted(node.value):
+                        rhs_tainted = True
+                        source_name = "tainted_fstring"
+
+                # Track tainted variable names
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        if rhs_tainted:
+                            self.tainted_vars.add(target.id)
+                            self.taint_flows.append((source_name or "unknown_source", target.id, node.value.lineno, node.lineno))
+                        elif target.id in self.tainted_vars and not rhs_tainted:
+                            # Variable reassigned to non-tainted value
+                            self.tainted_vars.discard(target.id)
+
+                self.generic_visit(node)
+
+            def visit_AugAssign(self, node: ast.AugAssign):
+                # Handle += with tainted values
+                if isinstance(node.target, ast.Name) and self._contains_tainted(node.value):
+                    self.tainted_vars.add(node.target.id)
+                    self.taint_flows.append(("tainted_augment", node.target.id, node.value.lineno, node.lineno))
+                self.generic_visit(node)
+
+            def visit_Call(self, node: ast.Call):
+                # Check if this is a sink call with tainted arguments
+                func_name = self._get_attribute_chain(node.func) if isinstance(node.func, ast.Attribute) else (
+                    node.func.id if isinstance(node.func, ast.Name) else None
+                )
+
+                if func_name and func_name in TAINT_SINKS:
+                    for arg in node.args:
+                        if self._contains_tainted(arg):
+                            tainted_var = self._get_tainted_var_name(arg)
+                            if tainted_var:
+                                self.taint_flows.append((tainted_var, func_name, tainted_var, node.lineno))
+
+                # Also check keyword arguments
+                for kw in node.keywords:
+                    if kw.value and self._contains_tainted(kw.value):
+                        tainted_var = self._get_tainted_var_name(kw.value)
+                        if tainted_var:
+                            self.taint_flows.append((tainted_var, func_name, tainted_var, node.lineno))
+
+                self.generic_visit(node)
+
+        visitor = TaintVisitor()
+        visitor.visit(tree)
+
+        # Generate findings for each taint flow
+        for source, sink, src_line, sink_line in visitor.taint_flows:
+            severity = "CRITICAL" if any(x in sink for x in ("execute", "system", "popen", "eval", "exec")) else "HIGH"
+            deduction = 15 if severity == "CRITICAL" else 10
+            findings.append(Finding(
+                id=f"taint-{source}-{sink}-{filename}-{sink_line}",
+                title=f"Tainted data flow: {source} → {sink}",
+                category="taint-analysis",
+                severity=severity,
+                description=f"Untrusted input from {source} flows into dangerous sink {sink} without sanitization, enabling injection attacks.",
+                file_path=filename,
+                line_number=sink_line,
+                evidence=f"Source at line {src_line}: {source} → Sink at line {sink_line}: {sink}",
+                deduction_points=deduction,
+                remediation=f"Sanitize/validate input from {source} before passing to {sink}. Use parameterized queries, allowlists, or safe APIs."
+            ))
 
         return findings
 
