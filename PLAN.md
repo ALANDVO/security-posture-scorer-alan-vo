@@ -54,3 +54,6 @@ Status: planned
 Acceptance:
 - GitHub action action bot posting posture score deltas and regression alerts directly on pull requests
 
+---
+
+Alan Vo · [alanvo.net](https://alanvo.net)

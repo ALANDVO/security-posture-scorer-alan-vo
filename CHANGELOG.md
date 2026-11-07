@@ -35,3 +35,7 @@ All notable changes to the Security Posture Scorer application are documented in
 - Scorer deduction arithmetic test boundary updated to reflect exact category deduction sums.
 - Scanner `scan_all` dispatch logic now respects `target_type` parameter when auditing raw snippets without explicit file extensions.
 - Database automatic initialization ensured before executing standalone benchmark evaluations.
+
+---
+
+Alan Vo · [alanvo.net](https://alanvo.net)

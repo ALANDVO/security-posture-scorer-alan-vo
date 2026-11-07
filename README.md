@@ -262,3 +262,7 @@ Configure settings via environment variables or a local `.env` file:
 
 Designed and implemented by **Alan Vo** ([alanvo@gmail.com](mailto:alanvo@gmail.com)).  
 Licensed under the [MIT License](LICENSE).
+
+---
+
+Alan Vo · [alanvo.net](https://alanvo.net)
