@@ -371,6 +371,15 @@ class SecurityScanner:
                         return True
                 return False
 
+            def _is_taint_sink(self, attr_chain: str) -> bool:
+                """Check if any suffix of the attribute chain matches a known taint sink."""
+                parts = attr_chain.split(".")
+                for i in range(len(parts)):
+                    suffix = ".".join(parts[i:])
+                    if suffix in TAINT_SINKS:
+                        return True
+                return False
+
             def _contains_tainted(self, node: ast.AST) -> bool:
                 if isinstance(node, ast.Name):
                     return node.id in self.tainted_vars
@@ -400,6 +409,26 @@ class SecurityScanner:
                     return self._get_tainted_var_name(node.value)
                 elif isinstance(node, ast.Subscript):
                     return self._get_tainted_var_name(node.value)
+                elif isinstance(node, ast.BinOp):
+                    left = self._get_tainted_var_name(node.left)
+                    if left:
+                        return left
+                    return self._get_tainted_var_name(node.right)
+                elif isinstance(node, ast.JoinedStr):
+                    for value in node.values:
+                        if isinstance(value, ast.FormattedValue):
+                            result = self._get_tainted_var_name(value.value)
+                            if result:
+                                return result
+                elif isinstance(node, ast.Call):
+                    for arg in node.args:
+                        result = self._get_tainted_var_name(arg)
+                        if result:
+                            return result
+                    for kw in node.keywords:
+                        result = self._get_tainted_var_name(kw.value)
+                        if result:
+                            return result
                 return None
 
             def visit_Assign(self, node: ast.Assign):
@@ -463,7 +492,7 @@ class SecurityScanner:
                     node.func.id if isinstance(node.func, ast.Name) else None
                 )
 
-                if func_name and func_name in TAINT_SINKS:
+                if func_name and self._is_taint_sink(func_name):
                     for arg in node.args:
                         if self._contains_tainted(arg):
                             tainted_var = self._get_tainted_var_name(arg)

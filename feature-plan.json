@@ -61,9 +61,16 @@
     {
       "id": "ast-semantic-taint-analyzer",
       "title": "Abstract Syntax Tree Semantic Taint Analysis",
-      "status": "in_progress",
+      "status": "done",
       "acceptance": [
-        "Multi-step data flow tracking from untrusted HTTP request inputs to sensitive database and command sinks"
+        "Multi-step data flow tracking from untrusted HTTP request inputs to sensitive database and command sinks",
+        "SQL injection detection: request.args → cursor.execute, conn.execute, session.execute",
+        "Command injection detection: request.args → subprocess.run, os.system, os.popen, eval, exec",
+        "Path traversal detection: request.args → open, pathlib.Path.open",
+        "XSS template injection detection: request.args → render_template_string, mark_safe",
+        "Taint propagation through assignments, string concatenation, f-strings, augmented assignments",
+        "Taint clearing on reassignment to safe values",
+        "Django, Flask, FastAPI/Starlette request accessor support"
       ],
       "implementation": [
         "backend/app/services/scanner.py"

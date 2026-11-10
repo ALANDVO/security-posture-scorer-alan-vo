@@ -38,10 +38,17 @@ Tests: `backend/tests/test_scanner.py`, `backend/tests/test_integration.py`
 
 ### ast-semantic-taint-analyzer — Abstract Syntax Tree Semantic Taint Analysis
 
-Status: in_progress
+Status: done
 
 Acceptance:
 - Multi-step data flow tracking from untrusted HTTP request inputs to sensitive database and command sinks
+- SQL injection detection: request.args → cursor.execute, conn.execute, session.execute
+- Command injection detection: request.args → subprocess.run, os.system, os.popen, eval, exec
+- Path traversal detection: request.args → open, pathlib.Path.open
+- XSS template injection detection: request.args → render_template_string, mark_safe
+- Taint propagation through assignments, string concatenation, f-strings, augmented assignments
+- Taint clearing on reassignment to safe values
+- Django, Flask, FastAPI/Starlette request accessor support
 
 Implementation: `backend/app/services/scanner.py`
 
