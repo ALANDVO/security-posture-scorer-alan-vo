@@ -61,3 +61,4 @@ htmlcov/
 *.sqlite-shm
 *.sqlite3-wal
 *.sqlite3-shm
+.venv*/
