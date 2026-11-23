@@ -1,0 +1,23 @@
+{
+  "name": "PR Security Posture Commenter",
+  "description": "Posts security posture score deltas and regression alerts on pull requests",
+  "inputs": {
+    "db-path": {
+      "description": "Path to SQLite database",
+      "required": false,
+      "default": ".sqlite3"
+    },
+    "before-scan-id": {
+      "description": "Previous scan ID for comparison",
+      "required": false
+    },
+    "after-scan-id": {
+      "description": "Current scan ID for comparison",
+      "required": false
+    }
+  },
+  "runs": {
+    "using": "node16",
+    "main": "index.js"
+  }
+}
