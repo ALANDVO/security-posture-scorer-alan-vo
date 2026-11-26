@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "current_feature": "ast-semantic-taint-analyzer",
+  "current_feature": "github-actions-posture-reporter",
   "features": [
     {
       "id": "continue-implementation",
@@ -82,12 +82,17 @@
     {
       "id": "github-actions-posture-reporter",
       "title": "Automated Pull Request Security Posture PR Commenter",
-      "status": "planned",
+      "status": "in_progress",
       "acceptance": [
         "GitHub action action bot posting posture score deltas and regression alerts directly on pull requests"
       ],
-      "implementation": [],
-      "tests": []
+      "implementation": [
+        "backend/app/api/pr_comment.py - API endpoint for generating PR comments",
+        "backend/app/main.py - Fixed import to include pr_comment router"
+      ],
+      "tests": [
+        "backend/tests/test_pr_comment.py - New test file for PR comment endpoint"
+      ]
     }
   ]
 }

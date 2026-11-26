@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.0 — work-in-progress checkpoint
+
+Partial code published for continued development. Known issues: STATUS.md.
+
+## 1.6.1 — work-in-progress checkpoint
+
+### Added
+- PR Security Posture Commenter API endpoint (`POST /api/pr-comment`) for generating markdown PR comments summarizing security posture delta between two scans
+- `generate_pr_comment` function in `backend/app/services/pr_commenter.py` for computing score deltas, resolved findings, and new regressions
+- FastAPI route registered at `/api/pr-comment` called by GitHub Action workflow `.github/workflows/pr-commenter.yml`
+
+### Fixed
+- Corrected corrupted import line in `backend/app/main.py` (`\nfrom backend.app.api.pr_comment import router as pr_comment_router` → proper import)
+- Added `pr_comment_router` to FastAPI application inclusion
+
 ## 1.6.0 — work-in-progress checkpoint
 
 Partial code published for continued development. Known issues: STATUS.md.

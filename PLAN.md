@@ -4,7 +4,7 @@ Each round completes one feature or repair. Future items are planned, not implem
 
 ## Current round
 
-ast-semantic-taint-analyzer
+github-actions-posture-reporter
 
 ## Roadmap
 
@@ -56,10 +56,14 @@ Tests: `backend/tests/test_scanner.py`
 
 ### github-actions-posture-reporter — Automated Pull Request Security Posture PR Commenter
 
-Status: planned
+Status: in_progress
 
 Acceptance:
 - GitHub action action bot posting posture score deltas and regression alerts directly on pull requests
+
+Implementation: `backend/app/api/pr_comment.py - API endpoint for generating PR comments`, `backend/app/main.py - Fixed import to include pr_comment router`
+
+Tests: `backend/tests/test_pr_comment.py - New test file for PR comment endpoint`
 
 ---
 

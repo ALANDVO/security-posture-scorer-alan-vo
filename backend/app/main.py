@@ -9,7 +9,7 @@ from backend.app.core.database import db
 from backend.app.api.health import router as health_router
 from backend.app.api.auth import router as auth_router
 from backend.app.api.posture import router as posture_router
-\nfrom backend.app.api.pr_comment import router as pr_comment_router
+from backend.app.api.pr_comment import router as pr_comment_router
 
 
 @asynccontextmanager
@@ -41,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(posture_router)
+    app.include_router(pr_comment_router)
 
     return app
 
